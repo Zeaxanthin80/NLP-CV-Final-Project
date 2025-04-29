@@ -1,0 +1,22 @@
+/* Custom styles */
+.drag-active {
+    border-color: #3b82f6 !important;
+    background-color: #eff6ff !important;
+}
+
+/* Animated loading spinner */
+.loading {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgba(0, 0, 0, 0.1);
+    border-left-color: #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <h1 class="text-3xl font-bold text-center mb-8">Video Content Adaptation System</h1>
+    
+    <!-- Input Form -->
+    <div class="bg-white shadow-md rounded-lg p-6 mb-6">
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold mb-4">Upload Video or Enter YouTube URL</h2>
+            
+            <!-- Tabs -->
+            <div class="border-b border-gray-200 mb-4">
+                <div class="flex -mb-px">
+                    <button class="tab-btn active px-4 py-2 text-blue-600 border-b-2 border-blue-600" data-tab="file">
+                        <i class="fas fa-file-upload mr-2"></i>File Upload
+                    </button>
+                    <button class="tab-btn px-4 py-2 text-gray-500 hover:text-gray-700" data-tab="youtube">
+                        <i class="fab fa-youtube mr-2"></i>YouTube URL
+                    </button>
+                </div>
+            </div>
+            
+            <!-- File Upload Form -->
+            <div id="file-tab" class="tab-content">
+                <form id="upload-form" class="space-y-4">
+                    <div class="flex items-center justify-center w-full">
+                        <label class="flex flex-col w-full h-32 border-4 border-dashed hover:bg-gray-100 hover:border-gray-300">
+                            <div class="flex flex-col items-center justify-center pt-7">
+                                <i class="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-2"></i>
+                                <p class="text-sm text-gray-400">Drag and drop your video or click to select</p>
+                            </div>
+                            <input type="file" class="opacity-0" accept=".mp4,.avi,.mov,.mkv" />
+                        </label>
+                    </div>
+                </form>
+            </div>
+            
+            <!-- YouTube URL Form -->
+            <div id="youtube-tab" class="tab-content hidden">
+                <form id="youtube-form" class="space-y-4">
+                    <div class="flex flex-col">
+                        <input type="url" 
+                               placeholder="Enter YouTube URL" 
+                               class="px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Process Button -->
+        <div class="text-center">
+            <button id="process-btn" 
+                    class="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    disabled>
+                <i class="fas fa-cog mr-2"></i>Process Video
+            </button>
+        </div>
+    </div>
+    
+    <!-- Progress Section -->
+    <div id="progress-section" class="hidden bg-white shadow-md rounded-lg p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">Processing Status</h3>
+        <div class="space-y-4">
+            <div class="relative pt-1">
+                <div class="flex mb-2 items-center justify-between">
+                    <div>
+                        <span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200">
+                            Progress
+                        </span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-xs font-semibold inline-block text-blue-600">
+                            <span id="progress-percentage">0</span>%
+                        </span>
+                    </div>
+                </div>
+                <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-blue-200">
+                    <div id="progress-bar" 
+                         class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-600"
+                         style="width: 0%"></div>
+                </div>
+            </div>
+            <div id="status-messages" class="space-y-2">
+                <!-- Status messages will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Transcript Section -->
+    <div id="transcript-section" class="hidden bg-white shadow-md rounded-lg p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">Transcript</h3>
+        <pre id="transcript-text" class="whitespace-pre-wrap text-gray-800 bg-gray-50 p-4 rounded"></pre>
+    </div>
+
+    <!-- Spanish Script Section -->
+    <div id="spanish-script-section" class="hidden bg-white shadow-md rounded-lg p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">Spanish Script</h3>
+        <div class="space-y-6" id="spanish-script-content">
+            <!-- Script sections will be inserted here -->
+        </div>
+    </div>
+
+    <!-- Error Section -->
+    <div id="error-section" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6">
+        <strong class="font-bold">Error:</strong>
+        <pre id="error-text" class="whitespace-pre-wrap select-all bg-red-50 p-2 mt-2 rounded text-xs"></pre>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Tab switching
+    const tabs = document.querySelectorAll('.tab-btn');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Remove active class from all tabs
+            tabs.forEach(t => {
+                t.classList.remove('active', 'text-blue-600', 'border-b-2', 'border-blue-600');
+                t.classList.add('text-gray-500');
+            });
+            
+            // Add active class to clicked tab
+            tab.classList.add('active', 'text-blue-600', 'border-b-2', 'border-blue-600');
+            
+            // Show corresponding content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.add('hidden');
+            });
+            document.getElementById(`${tab.dataset.tab}-tab`).classList.remove('hidden');
+        });
+    });
+
+    // File upload handling
+    const fileInput = document.querySelector('input[type="file"]');
+    const processBtn = document.getElementById('process-btn');
+    
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            processBtn.disabled = false;
+        } else {
+            processBtn.disabled = true;
+        }
+    });
+
+    // YouTube URL handling
+    const urlInput = document.querySelector('input[type="url"]');
+    urlInput.addEventListener('input', (e) => {
+        processBtn.disabled = !e.target.value;
+    });
+
+    // Process button handling
+    processBtn.addEventListener('click', async () => {
+        const formData = new FormData();
+        
+        if (!document.getElementById('youtube-tab').classList.contains('hidden')) {
+            formData.append('youtube_url', urlInput.value);
+        } else {
+            formData.append('video', fileInput.files[0]);
+        }
+
+        try {
+            const response = await fetch('/process', {
+                method: 'POST',
+                body: formData
+            });
+
+            const errorSection = document.getElementById('error-section');
+            const errorText = document.getElementById('error-text');
+            errorSection.classList.add('hidden');
+            errorText.textContent = '';
+
+            if (response.ok) {
+                const data = await response.json();
+                document.getElementById('progress-section').classList.remove('hidden');
+                // Start polling for status
+                if (data.task_id) {
+                    pollStatus(data.task_id);
+                }
+            } else {
+                // Try to parse and show backend error JSON
+                response.json().then(data => {
+                    let errMsg = data.error || 'Upload failed';
+                    let tb = data.traceback ? ('\nTraceback:\n' + data.traceback) : '';
+                    errorText.textContent = errMsg + tb;
+                    errorSection.classList.remove('hidden');
+                }).catch(() => {
+                    errorText.textContent = 'Upload failed';
+                    errorSection.classList.remove('hidden');
+                });
+            }
+        } catch (error) {
+            const errorSection = document.getElementById('error-section');
+            const errorText = document.getElementById('error-text');
+            errorText.textContent = error.message;
+            errorSection.classList.remove('hidden');
+        }
+    });
+});
+
+function pollStatus(taskId) {
+    const progressSection = document.getElementById('progress-section');
+    const transcriptSection = document.getElementById('transcript-section');
+    const spanishScriptSection = document.getElementById('spanish-script-section');
+    const transcriptText = document.getElementById('transcript-text');
+    const spanishScriptContent = document.getElementById('spanish-script-content');
+    const errorSection = document.getElementById('error-section');
+    const errorText = document.getElementById('error-text');
+    const statusMessages = document.getElementById('status-messages');
+
+    progressSection.classList.remove('hidden');
+    transcriptSection.classList.add('hidden');
+    spanishScriptSection.classList.add('hidden');
+    errorSection.classList.add('hidden');
+    transcriptText.textContent = '';
+    spanishScriptContent.innerHTML = '';
+    errorText.textContent = '';
+
+    let lastStatusMsg = '';
+    const interval = setInterval(async () => {
+        try {
+            const response = await fetch(`/status/${taskId}`);
+            const data = await response.json();
+            updateProgress(data.progress);
+
+            // Update status message
+            if (data.status_msg && data.status_msg !== lastStatusMsg) {
+                lastStatusMsg = data.status_msg;
+                const msgElem = document.createElement('div');
+                msgElem.textContent = data.status_msg;
+                statusMessages.appendChild(msgElem);
+            }
+
+            if (data.status === 'success') {
+                clearInterval(interval);
+                progressSection.classList.add('hidden');
+                transcriptSection.classList.remove('hidden');
+                transcriptText.textContent = data.transcript;
+                
+                // Display Spanish script if available
+                spanishScriptSection.classList.remove('hidden');
+                try {
+                    if (data.spanish_script) {
+                        renderSpanishScript(data.spanish_script);
+                    } else {
+                        // Handle missing Spanish script
+                        const container = document.getElementById('spanish-script-content');
+                        container.innerHTML = '<p class="text-gray-500 italic">Spanish script generation is in progress or not available for this video.</p>';
+                    }
+                } catch (err) {
+                    console.error('Error rendering Spanish script:', err);
+                    const container = document.getElementById('spanish-script-content');
+                    container.innerHTML = '<p class="text-red-500">Error rendering Spanish script: ' + err.message + '</p>';
+                }
+            } else if (data.status === 'failure') {
+                clearInterval(interval);
+                progressSection.classList.add('hidden');
+                errorSection.classList.remove('hidden');
+                errorText.textContent = data.error || 'Task failed.';
+            }
+        } catch (error) {
+            clearInterval(interval);
+            progressSection.classList.add('hidden');
+            errorSection.classList.remove('hidden');
+            errorText.textContent = 'Error polling status: ' + error.message;
+        }
+    }, 1000);
+}
+
+function updateProgress(percentage) {
+    document.getElementById('progress-bar').style.width = `${percentage}%`;
+    document.getElementById('progress-percentage').textContent = percentage;
+}
+
+function renderSpanishScript(script) {
+    const container = document.getElementById('spanish-script-content');
+    container.innerHTML = '';
+    
+    // Check if script is valid
+    if (!script || !script.sections) {
+        const errorMsg = document.createElement('p');
+        errorMsg.className = 'text-red-500';
+        errorMsg.textContent = 'Spanish script data is not available or is invalid.';
+        container.appendChild(errorMsg);
+        return;
+    }
+    
+    // Check if sections is an array (new format) or object (old format)
+    if (Array.isArray(script.sections)) {
+        // New format: array of section objects
+        script.sections.forEach(section => {
+            renderScriptSection(container, section);
+        });
+    } else {
+        // Old format: object with section keys
+        // Use the order array if available, otherwise fallback to object keys
+        const sectionOrder = script.order || Object.keys(script.sections);
+        
+        // Iterate through sections in the specified order
+        sectionOrder.forEach(sectionKey => {
+            const section = script.sections[sectionKey];
+            if (!section) return;
+            renderScriptSection(container, section);
+        });
+    }
+}
+
+// Helper function to render a single script section
+function renderScriptSection(container, section) {
+    const sectionDiv = document.createElement('div');
+    sectionDiv.className = 'bg-gray-50 p-4 rounded';
+    
+    // Create section header
+    const header = document.createElement('div');
+    header.className = 'mb-2';
+    
+    const title = document.createElement('h4');
+    title.className = 'text-md font-bold text-blue-600';
+    title.textContent = section.title;
+    header.appendChild(title);
+    
+    const description = document.createElement('p');
+    description.className = 'text-sm text-gray-600 italic';
+    description.textContent = section.description;
+    header.appendChild(description);
+    
+    sectionDiv.appendChild(header);
+    
+    // Create section content
+    const content = document.createElement('p');
+    content.className = 'whitespace-pre-wrap text-gray-800';
+    content.textContent = section.content;
+    sectionDiv.appendChild(content);
+    
+    container.appendChild(sectionDiv);
+}
+
+</script>
+{% endblock %}
