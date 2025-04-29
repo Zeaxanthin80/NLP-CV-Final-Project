@@ -155,32 +155,62 @@ def celery_transcribe(self, source_path_or_url, is_youtube=False, model_size='ba
             # Generate Spanish script
             set_task_progress(self.request.id, 70, 'Generating Spanish script')
             try:
-                from app.utils.script_generation import generate_spanish_script
-                spanish_script = generate_spanish_script(transcript)
-                # Ensure the script has the expected structure
+                from app.utils.script_generation import generate_structured_scripts
+                structured_scripts = generate_structured_scripts(transcript)
+                # Extract both original structured transcript and Spanish script
+                structured_transcript = structured_scripts["original"]
+                spanish_script = structured_scripts["spanish"]
+                # Ensure the scripts have the expected structure
+                if not isinstance(structured_transcript, dict) or 'sections' not in structured_transcript:
+                    structured_transcript = {
+                        "sections": [
+                            {
+                                "id": "error",
+                                "title": "Error",
+                                "description": "Error in transcript structure",
+                                "content": "The transcript does not have the expected structure."
+                            }
+                        ]
+                    }
+                
                 if not isinstance(spanish_script, dict) or 'sections' not in spanish_script:
                     spanish_script = {
-                        "sections": {
-                            "main_content": {
-                                "title": "Contenido Principal",
-                                "description": "Contenido traducido",
-                                "content": "Error al estructurar el guión. Usando traducción simple."
+                        "sections": [
+                            {
+                                "id": "error",
+                                "title": "Error",
+                                "description": "Error en la estructura del guión",
+                                "content": "El guión no tiene la estructura esperada."
                             }
-                        }
+                        ]
                     }
+                
+                # Convert to JSON
+                structured_transcript_json = json.dumps(structured_transcript)
                 spanish_script_json = json.dumps(spanish_script)
             except Exception as e:
                 print(f"Error generating Spanish script: {str(e)}")
                 traceback.print_exc()
                 # Create a valid JSON structure even on error
-                spanish_script_json = json.dumps({
-                    "sections": {
-                        "error": {
+                structured_transcript_json = json.dumps({
+                    "sections": [
+                        {
+                            "id": "error",
                             "title": "Error",
-                            "description": "Error al generar el guión en español",
+                            "description": "Error in transcript structure",
                             "content": str(e)
                         }
-                    }
+                    ]
+                })
+                spanish_script_json = json.dumps({
+                    "sections": [
+                        {
+                            "id": "error",
+                            "title": "Error",
+                            "description": "Error en la estructura del guión",
+                            "content": str(e)
+                        }
+                    ]
                 })
                 
             # Extract and describe scenes from the video
@@ -212,27 +242,14 @@ def celery_transcribe(self, source_path_or_url, is_youtube=False, model_size='ba
                     "description": f"Error extracting scenes: {str(e)}"
                 }])
             
-            # Store the transcript, Spanish script, and scenes in Redis
-            r = redis.Redis.from_url(REDIS_URL)
-            task_key = f'celery-task-meta-{self.request.id}'
-            
-            # Check if the key exists and what type it is
-            key_type = r.type(task_key).decode('utf-8')
-            
-            # If it's not a hash or doesn't exist, delete it and create a new hash
-            if key_type != 'hash' and key_type != 'none':
-                r.delete(task_key)
-            
-            # Store all data as a hash
-            task_data = {
-                'result': transcript,
-                'spanish_script': spanish_script_json,
-                'scenes': scenes_json,
-                'status': 'success',
-                'progress': '100',
-                'status_msg': 'Completed'
-            }
-            r.hset(task_key, mapping=task_data)
+            # Store the result in Redis
+            r = redis.Redis.from_url(os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0'))
+            r.hset(f'celery-task-meta-{self.request.id}', 'progress', 100)
+            r.hset(f'celery-task-meta-{self.request.id}', 'status', 'SUCCESS')
+            r.hset(f'celery-task-meta-{self.request.id}', 'transcript', transcript)
+            r.hset(f'celery-task-meta-{self.request.id}', 'structured_transcript', structured_transcript_json)
+            r.hset(f'celery-task-meta-{self.request.id}', 'spanish_script', spanish_script_json)
+            r.hset(f'celery-task-meta-{self.request.id}', 'scenes', scenes_json)
             
             # Also use the helper function for consistency
             set_task_progress(self.request.id, 100, 'Completed', result=transcript)

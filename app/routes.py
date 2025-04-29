@@ -87,6 +87,16 @@ def get_status(task_id):
                         except Exception as e:
                             print(f"Error decoding result: {str(e)}")
                     
+                    # Get structured transcript if it exists
+                    if b'structured_transcript' in progress_data:
+                        try:
+                            structured_transcript_str = progress_data.get(b'structured_transcript', b'').decode('utf-8')
+                            if structured_transcript_str:
+                                import json
+                                response['structured_transcript'] = json.loads(structured_transcript_str)
+                        except Exception as e:
+                            print(f"Error decoding structured transcript: {str(e)}")
+                    
                     # Get Spanish script if it exists
                     if b'spanish_script' in progress_data:
                         try:

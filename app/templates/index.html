@@ -89,7 +89,7 @@
     
     <div id="transcript-section" class="hidden bg-white shadow-md rounded-lg p-6 mb-6">
         <h2 class="text-xl font-semibold mb-4">Video Transcript</h2>
-        <pre id="transcript-text" class="whitespace-pre-wrap bg-gray-50 p-4 rounded text-sm"></pre>
+        <div id="transcript-content" class="space-y-4"></div>
     </div>
     
     <div id="spanish-script-section" class="hidden bg-white shadow-md rounded-lg p-6 mb-6">
@@ -218,7 +218,7 @@ function pollStatus(taskId) {
     const transcriptSection = document.getElementById('transcript-section');
     const spanishScriptSection = document.getElementById('spanish-script-section');
     const scenesSection = document.getElementById('scenes-section');
-    const transcriptText = document.getElementById('transcript-text');
+    const transcriptContent = document.getElementById('transcript-content');
     const spanishScriptContent = document.getElementById('spanish-script-content');
     const scenesContent = document.getElementById('scenes-content');
     const errorSection = document.getElementById('error-section');
@@ -230,7 +230,7 @@ function pollStatus(taskId) {
     spanishScriptSection.classList.add('hidden');
     scenesSection.classList.add('hidden');
     errorSection.classList.add('hidden');
-    transcriptText.textContent = '';
+    transcriptContent.innerHTML = '';
     spanishScriptContent.innerHTML = '';
     scenesContent.innerHTML = '';
     errorText.textContent = '';
@@ -253,9 +253,24 @@ function pollStatus(taskId) {
             if (data.status === 'success') {
                 clearInterval(interval);
                 progressSection.classList.add('hidden');
-                transcriptSection.classList.remove('hidden');
-                transcriptText.textContent = data.transcript;
-                
+                if (data.transcript) {
+                    document.getElementById('transcript-section').classList.remove('hidden');
+                    // Store the plain transcript in case we need to fall back to it
+                    window.plainTranscript = data.transcript;
+                    
+                    // If we have a structured transcript, use that
+                    if (data.structured_transcript) {
+                        renderStructuredTranscript(data.structured_transcript);
+                    } else {
+                        // Otherwise fall back to plain transcript
+                        const container = document.getElementById('transcript-content');
+                        container.innerHTML = '';
+                        const plainText = document.createElement('pre');
+                        plainText.className = 'whitespace-pre-wrap bg-gray-50 p-4 rounded text-sm';
+                        plainText.textContent = data.transcript;
+                        container.appendChild(plainText);
+                    }
+                }
                 // Display Spanish script if available
                 spanishScriptSection.classList.remove('hidden');
                 try {
@@ -305,6 +320,74 @@ function pollStatus(taskId) {
 function updateProgress(percentage) {
     document.getElementById('progress-bar').style.width = `${percentage}%`;
     document.getElementById('progress-percentage').textContent = percentage;
+}
+
+function renderStructuredTranscript(transcript) {
+    const container = document.getElementById('transcript-content');
+    container.innerHTML = '';
+    
+    // Check if transcript is valid
+    if (!transcript || !transcript.sections) {
+        // If structured transcript is not available, display the plain transcript
+        if (window.plainTranscript) {
+            const plainText = document.createElement('pre');
+            plainText.className = 'whitespace-pre-wrap bg-gray-50 p-4 rounded text-sm';
+            plainText.textContent = window.plainTranscript;
+            container.appendChild(plainText);
+        } else {
+            const errorMsg = document.createElement('p');
+            errorMsg.className = 'text-red-500';
+            errorMsg.textContent = 'Transcript data is not available.';
+            container.appendChild(errorMsg);
+        }
+        return;
+    }
+    
+    // Render the structured transcript
+    if (Array.isArray(transcript.sections)) {
+        // Render each section
+        transcript.sections.forEach(section => {
+            renderTranscriptSection(container, section);
+        });
+    } else {
+        // Fallback for unexpected format
+        const errorMsg = document.createElement('p');
+        errorMsg.className = 'text-red-500';
+        errorMsg.textContent = 'Transcript structure is invalid.';
+        container.appendChild(errorMsg);
+    }
+}
+
+// Helper function to render a single transcript section
+function renderTranscriptSection(container, section) {
+    const sectionDiv = document.createElement('div');
+    sectionDiv.className = 'bg-gray-50 p-4 rounded mb-4';
+    
+    // Create section header
+    const header = document.createElement('div');
+    header.className = 'mb-2';
+    
+    const title = document.createElement('h3');
+    title.className = 'text-lg font-medium text-blue-600';
+    title.textContent = section.title;
+    header.appendChild(title);
+    
+    if (section.description) {
+        const description = document.createElement('p');
+        description.className = 'text-sm text-gray-500';
+        description.textContent = section.description;
+        header.appendChild(description);
+    }
+    
+    sectionDiv.appendChild(header);
+    
+    // Create section content
+    const content = document.createElement('div');
+    content.className = 'text-gray-700';
+    content.textContent = section.content;
+    sectionDiv.appendChild(content);
+    
+    container.appendChild(sectionDiv);
 }
 
 function renderSpanishScript(script) {

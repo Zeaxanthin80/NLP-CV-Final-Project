@@ -225,8 +225,47 @@ class ScriptGenerator:
             translated_cta = "Gracias por su comprensión."
             translated_outro = ""
         
-        # Format the script with ordered sections
-        script = {
+        # Format both original and translated scripts with ordered sections
+        original_script = {
+            "sections": [
+                {
+                    "id": "hook",
+                    "title": "Hook",
+                    "description": "Grab viewer attention in the first 15 seconds",
+                    "content": hook
+                },
+                {
+                    "id": "intro",
+                    "title": "Intro/Branding",
+                    "description": "Introduce the topic and brand (15-30 seconds)",
+                    "content": intro
+                },
+                {
+                    "id": "main_content",
+                    "title": "Main Content",
+                    "description": "The main body of the video",
+                    "content": main_content
+                },
+                {
+                    "id": "call_to_action",
+                    "title": "Call to Action",
+                    "description": "Tell the viewer what to do next",
+                    "content": call_to_action
+                }
+            ]
+        }
+        
+        # Add outro to original script if it exists
+        if outro:
+            original_script["sections"].append({
+                "id": "outro",
+                "title": "Outro",
+                "description": "Conclusion of the video (Optional)",
+                "content": outro
+            })
+            
+        # Format the Spanish script with ordered sections
+        spanish_script = {
             "sections": [
                 {
                     "id": "hook",
@@ -255,19 +294,18 @@ class ScriptGenerator:
             ]
         }
         
-        # Add outro if it exists
+        # Add outro to Spanish script if it exists
         if translated_outro:
-            script["sections"].append({
+            spanish_script["sections"].append({
                 "id": "outro",
                 "title": "Cierre",
                 "description": "Conclusión del video (Opcional)",
                 "content": translated_outro
             })
             
-        return script
+        return {"original": original_script, "spanish": spanish_script}
 
-def generate_spanish_script(transcript, video_duration=None):
-    """Generate a structured Spanish script from an English transcript."""
+def generate_structured_scripts(transcript, video_duration=None):
+    """Generate structured scripts (original and Spanish) from an English transcript."""
     generator = ScriptGenerator()
-    script = generator.structure_script(transcript, video_duration)
-    return script
+    return generator.structure_script(transcript, video_duration)
