@@ -69,6 +69,49 @@ python main.py
 - **NLTK**: Natural Language Toolkit for text processing and tokenization
 - **Transformers**: Hugging Face library for NLP tasks and models
 
+#### Spanish Script Generation Details
+
+The Spanish interpretation of the extracted transcript uses the following NLP technologies:
+
+##### MarianMT Neural Machine Translation Model
+
+The core NLP technology used for translating the English transcript to Spanish is the **MarianMT** model from the Hugging Face Transformers library, specifically the `Helsinki-NLP/opus-mt-en-es` model variant.
+
+Here's how it works in the application:
+
+1. **Model Initialization**:
+   ```python
+   self.tokenizer = MarianTokenizer.from_pretrained(model_name)
+   self.model = MarianMTModel.from_pretrained(model_name).to(self.device)
+   ```
+
+2. **Smart Text Processing**:
+   - The system uses NLTK's sentence tokenization (with fallbacks) to break the transcript into sentences
+   - It then chunks these sentences to avoid exceeding the model's token limits (512 tokens)
+
+3. **Neural Translation**:
+   - Each chunk is tokenized and passed through the neural model
+   - The model generates Spanish text using sequence-to-sequence translation
+   - The translated chunks are then reassembled into a complete Spanish script
+
+4. **Structural Preservation**:
+   - After translation, the system maintains the script structure by mapping translated sentences to the original sections
+   - This ensures the Spanish script follows the same flow as the original
+
+##### Additional NLP Components
+
+Beyond the core translation, the application uses:
+
+1. **NLTK for Text Processing**:
+   - Sentence tokenization to break text into meaningful units
+   - Fallback mechanisms when standard tokenization fails
+
+2. **Custom Script Structuring**:
+   - Analyzes the text to identify natural sections (Hook, Intro, Main Content, etc.)
+   - Uses proportional text segmentation when timestamps aren't available
+
+This approach creates a Spanish script that's more than just a direct translation - it's a properly structured adaptation that preserves the flow and intent of the original content while being naturally readable in Spanish.
+
 ### CV Technologies
 - **OpenCV**: Computer vision library for video and frame processing
 - **BLIP**: Bootstrapping Language-Image Pre-training for image captioning
