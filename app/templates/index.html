@@ -86,19 +86,20 @@
             </div>
         </div>
     </div>
-
-    <!-- Transcript Section -->
+    
     <div id="transcript-section" class="hidden bg-white shadow-md rounded-lg p-6 mb-6">
-        <h3 class="text-lg font-semibold mb-4">Transcript</h3>
-        <pre id="transcript-text" class="whitespace-pre-wrap text-gray-800 bg-gray-50 p-4 rounded"></pre>
+        <h2 class="text-xl font-semibold mb-4">Video Transcript</h2>
+        <pre id="transcript-text" class="whitespace-pre-wrap bg-gray-50 p-4 rounded text-sm"></pre>
     </div>
-
-    <!-- Spanish Script Section -->
+    
     <div id="spanish-script-section" class="hidden bg-white shadow-md rounded-lg p-6 mb-6">
-        <h3 class="text-lg font-semibold mb-4">Spanish Script</h3>
-        <div class="space-y-6" id="spanish-script-content">
-            <!-- Script sections will be inserted here -->
-        </div>
+        <h2 class="text-xl font-semibold mb-4">Spanish Video Script</h2>
+        <div id="spanish-script-content" class="space-y-4"></div>
+    </div>
+    
+    <div id="scenes-section" class="hidden bg-white shadow-md rounded-lg p-6 mb-6">
+        <h2 class="text-xl font-semibold mb-4">Scene Descriptions (Computer Vision Analysis)</h2>
+        <div id="scenes-content" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
     </div>
 
     <!-- Error Section -->
@@ -133,6 +134,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // Store the current task ID globally
+    window.currentTaskId = null;
+
     // File upload handling
     const fileInput = document.querySelector('input[type="file"]');
     const processBtn = document.getElementById('process-btn');
@@ -152,34 +156,43 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Process button handling
-    processBtn.addEventListener('click', async () => {
-        const formData = new FormData();
+    processBtn.addEventListener('click', async function() {
+        const activeTab = document.querySelector('.tab-btn.active').dataset.tab;
+        let formData = new FormData();
         
-        if (!document.getElementById('youtube-tab').classList.contains('hidden')) {
-            formData.append('youtube_url', urlInput.value);
-        } else {
+        if (activeTab === 'file') {
+            const fileInput = document.querySelector('#file-tab input[type="file"]');
+            if (!fileInput.files.length) {
+                showError('Please select a video file to upload.');
+                return;
+            }
             formData.append('video', fileInput.files[0]);
+        } else { // YouTube tab
+            const urlInput = document.querySelector('#youtube-tab input[type="url"]');
+            if (!urlInput.value) {
+                showError('Please enter a YouTube URL.');
+                return;
+            }
+            formData.append('youtube_url', urlInput.value);
         }
-
+        
         try {
             const response = await fetch('/process', {
                 method: 'POST',
                 body: formData
             });
-
-            const errorSection = document.getElementById('error-section');
-            const errorText = document.getElementById('error-text');
-            errorSection.classList.add('hidden');
-            errorText.textContent = '';
-
+            
+            const data = await response.json();
+            
             if (response.ok) {
-                const data = await response.json();
-                document.getElementById('progress-section').classList.remove('hidden');
+                // Store the task ID globally
+                window.currentTaskId = data.task_id;
+                console.log('Started task:', window.currentTaskId);
+                
                 // Start polling for status
-                if (data.task_id) {
-                    pollStatus(data.task_id);
-                }
+                pollStatus(data.task_id);
             } else {
+                showError(data.error || 'An error occurred while processing the video.');
                 // Try to parse and show backend error JSON
                 response.json().then(data => {
                     let errMsg = data.error || 'Upload failed';
@@ -204,8 +217,10 @@ function pollStatus(taskId) {
     const progressSection = document.getElementById('progress-section');
     const transcriptSection = document.getElementById('transcript-section');
     const spanishScriptSection = document.getElementById('spanish-script-section');
+    const scenesSection = document.getElementById('scenes-section');
     const transcriptText = document.getElementById('transcript-text');
     const spanishScriptContent = document.getElementById('spanish-script-content');
+    const scenesContent = document.getElementById('scenes-content');
     const errorSection = document.getElementById('error-section');
     const errorText = document.getElementById('error-text');
     const statusMessages = document.getElementById('status-messages');
@@ -213,9 +228,11 @@ function pollStatus(taskId) {
     progressSection.classList.remove('hidden');
     transcriptSection.classList.add('hidden');
     spanishScriptSection.classList.add('hidden');
+    scenesSection.classList.add('hidden');
     errorSection.classList.add('hidden');
     transcriptText.textContent = '';
     spanishScriptContent.innerHTML = '';
+    scenesContent.innerHTML = '';
     errorText.textContent = '';
 
     let lastStatusMsg = '';
@@ -253,6 +270,22 @@ function pollStatus(taskId) {
                     console.error('Error rendering Spanish script:', err);
                     const container = document.getElementById('spanish-script-content');
                     container.innerHTML = '<p class="text-red-500">Error rendering Spanish script: ' + err.message + '</p>';
+                }
+                
+                // Display scene descriptions if available
+                scenesSection.classList.remove('hidden');
+                try {
+                    if (data.scenes) {
+                        renderScenes(data.scenes);
+                    } else {
+                        // Handle missing scenes
+                        const container = document.getElementById('scenes-content');
+                        container.innerHTML = '<p class="text-gray-500 italic">Scene extraction is in progress or not available for this video.</p>';
+                    }
+                } catch (err) {
+                    console.error('Error rendering scenes:', err);
+                    const container = document.getElementById('scenes-content');
+                    container.innerHTML = '<p class="text-red-500">Error rendering scene descriptions: ' + err.message + '</p>';
                 }
             } else if (data.status === 'failure') {
                 clearInterval(interval);
@@ -337,5 +370,55 @@ function renderScriptSection(container, section) {
     container.appendChild(sectionDiv);
 }
 
+// Function to render scene descriptions
+function renderScenes(scenesJson) {
+    const container = document.getElementById('scenes-content');
+    container.innerHTML = '';
+    
+    let scenes;
+    if (typeof scenesJson === 'string') {
+        scenes = JSON.parse(scenesJson);
+    } else {
+        scenes = scenesJson;
+    }
+    
+    if (!Array.isArray(scenes) || scenes.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 italic">No scene descriptions available for this video.</p>';
+        return;
+    }
+    
+    scenes.forEach(scene => {
+        const sceneCard = document.createElement('div');
+        sceneCard.className = 'bg-gray-50 rounded-lg overflow-hidden shadow-sm';
+        
+        // Create scene content
+        let imageHtml = '';
+        
+        // Check if we have a URL for the frame image
+        if (scene.url) {
+            // Use the static URL path to display the image
+            imageHtml = `<div class="w-full h-48 bg-gray-200 flex items-center justify-center overflow-hidden">
+                            <img src="${scene.url}" class="w-full h-full object-cover" 
+                                 alt="Scene at ${scene.timestamp_formatted}" 
+                                 onerror="this.onerror=null; this.src=''; this.alt='Image not available'; this.parentElement.innerHTML='<span class=\'text-gray-500\'>Scene at ${scene.timestamp_formatted}</span>';">
+                         </div>`;
+        } else {
+            // If no URL, just show a placeholder
+            imageHtml = `<div class="w-full h-48 bg-gray-200 flex items-center justify-center">
+                            <span class="text-gray-500">Scene at ${scene.timestamp_formatted}</span>
+                         </div>`;
+        }
+        
+        sceneCard.innerHTML = `
+            ${imageHtml}
+            <div class="p-4">
+                <div class="font-medium text-gray-700 mb-2">Timestamp: ${scene.timestamp_formatted}</div>
+                <p class="text-gray-600 text-sm">${scene.description || 'No description available'}</p>
+            </div>
+        `;
+        
+        container.appendChild(sceneCard);
+    });
+}
 </script>
 {% endblock %}

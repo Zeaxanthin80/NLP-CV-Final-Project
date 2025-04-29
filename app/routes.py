@@ -1,8 +1,9 @@
 
-from flask import Blueprint, render_template, request, jsonify, current_app
+from flask import Blueprint, render_template, request, jsonify, current_app, send_file
 from werkzeug.utils import secure_filename
 import os
 import redis
+import json
 from app.utils.transcription import celery_transcribe
 from celery.result import AsyncResult
 
@@ -96,6 +97,18 @@ def get_status(task_id):
                         except Exception as e:
                             print(f"Error decoding Spanish script: {str(e)}")
                     
+                    # Get scene descriptions if they exist
+                    if b'scenes' in progress_data:
+                        try:
+                            scenes_str = progress_data.get(b'scenes', b'').decode('utf-8')
+                            if scenes_str:
+                                import json
+                                response['scenes'] = json.loads(scenes_str)
+                        except Exception as e:
+                            print(f"Error decoding scene descriptions: {str(e)}")
+                            import traceback
+                            traceback.print_exc()
+                    
                     # Get error if it exists
                     if b'error' in progress_data:
                         try:
@@ -143,3 +156,56 @@ def get_status(task_id):
         print(f"Error in get_status: {str(e)}")
         print(traceback.format_exc())
         return jsonify({'error': str(e), 'status': 'error', 'task_id': task_id}), 500
+
+@bp.route('/frames/<task_id>/<frame_index>')
+def get_frame(task_id, frame_index):
+    """
+    Serve a frame image from a processed video.
+    """
+    try:
+        # Get the frame data from Redis
+        r = redis.Redis.from_url('redis://localhost:6379/0')
+        key = f'celery-task-meta-{task_id}'
+        
+        print(f"DEBUG: Accessing frame for task {task_id}, frame {frame_index}")
+        
+        if not r.exists(key):
+            print(f"DEBUG: Task {task_id} not found in Redis")
+            return jsonify({'error': 'Task not found'}), 404
+        
+        # Get the scenes data
+        scenes_str = r.hget(key, 'scenes')
+        if not scenes_str:
+            print(f"DEBUG: No scenes data for task {task_id}")
+            return jsonify({'error': 'No scenes available for this task'}), 404
+        
+        # Parse the scenes data
+        scenes = json.loads(scenes_str.decode('utf-8'))
+        print(f"DEBUG: Found {len(scenes)} scenes for task {task_id}")
+        
+        frame_index = int(frame_index)
+        if frame_index < 0 or frame_index >= len(scenes):
+            print(f"DEBUG: Invalid frame index {frame_index}, max is {len(scenes)-1}")
+            return jsonify({'error': 'Invalid frame index'}), 404
+        
+        # Get the frame path
+        frame_path = scenes[frame_index].get('path')
+        print(f"DEBUG: Frame path for index {frame_index}: {frame_path}")
+        
+        if not frame_path:
+            print(f"DEBUG: No path found for frame {frame_index}")
+            return jsonify({'error': 'Frame path not found'}), 404
+            
+        if not os.path.exists(frame_path):
+            print(f"DEBUG: Frame file does not exist at path: {frame_path}")
+            return jsonify({'error': 'Frame image file not found'}), 404
+        
+        # Serve the image file
+        print(f"DEBUG: Serving frame image from {frame_path}")
+        return send_file(frame_path, mimetype='image/jpeg')
+    
+    except Exception as e:
+        import traceback
+        print(f"DEBUG: Error in get_frame: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': f'Error retrieving frame: {str(e)}'}), 500

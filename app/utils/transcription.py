@@ -4,35 +4,68 @@ import subprocess
 import json
 from pytube import YouTube
 import whisper
+import traceback
 
 # Download YouTube video and return the path to the downloaded file
 
 def download_youtube_video(youtube_url, download_dir):
     """
-    Downloads the best audio from a YouTube URL using yt-dlp and returns the path to the downloaded file.
+    Downloads both video and audio from a YouTube URL using yt-dlp.
+    Returns a tuple of (video_path, audio_path).
     """
     import shutil
     yt_dlp_path = shutil.which("yt-dlp")
     if not yt_dlp_path:
         raise RuntimeError("yt-dlp is not installed or not found in PATH.")
-    output_path = os.path.join(download_dir, '%(title)s.%(ext)s')
-    command = [
+    
+    # First, download the video file for scene extraction
+    video_output_path = os.path.join(download_dir, 'video_%(title)s.%(ext)s')
+    video_command = [
+        yt_dlp_path,
+        '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        '-o', video_output_path,
+        youtube_url
+    ]
+    video_result = subprocess.run(video_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if video_result.returncode != 0:
+        raise RuntimeError(f"yt-dlp failed to download video: {video_result.stderr.decode('utf-8')}")
+    
+    # Find the downloaded video file
+    video_path = None
+    for fname in os.listdir(download_dir):
+        if fname.startswith('video_') and (fname.endswith('.mp4') or fname.endswith('.mkv')):
+            video_path = os.path.join(download_dir, fname)
+            break
+    
+    if not video_path:
+        raise RuntimeError("Video file not found after yt-dlp download.")
+    
+    # Now download/extract audio for transcription
+    audio_output_path = os.path.join(download_dir, 'audio_%(title)s.%(ext)s')
+    audio_command = [
         yt_dlp_path,
         '-f', 'bestaudio',
         '--extract-audio',
         '--audio-format', 'wav',
         '--audio-quality', '0',
-        '-o', output_path,
+        '-o', audio_output_path,
         youtube_url
     ]
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    if result.returncode != 0:
-        raise RuntimeError(f"yt-dlp failed: {result.stderr.decode('utf-8')}")
-    # Find the downloaded .wav file in download_dir
+    audio_result = subprocess.run(audio_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if audio_result.returncode != 0:
+        raise RuntimeError(f"yt-dlp failed to extract audio: {audio_result.stderr.decode('utf-8')}")
+    
+    # Find the downloaded audio file
+    audio_path = None
     for fname in os.listdir(download_dir):
-        if fname.endswith('.wav'):
-            return os.path.join(download_dir, fname)
-    raise RuntimeError("Audio file not found after yt-dlp download.")
+        if fname.startswith('audio_') and fname.endswith('.wav'):
+            audio_path = os.path.join(download_dir, fname)
+            break
+    
+    if not audio_path:
+        raise RuntimeError("Audio file not found after yt-dlp download.")
+    
+    return (video_path, audio_path)
 
 # Extract audio from video file using ffmpeg
 
@@ -106,19 +139,21 @@ def celery_transcribe(self, source_path_or_url, is_youtube=False, model_size='ba
     with tempfile.TemporaryDirectory() as tmpdir:
         try:
             if is_youtube:
-                set_task_progress(self.request.id, 10, 'Downloading YouTube audio')
-                video_path = download_youtube_video(source_path_or_url, tmpdir)
+                set_task_progress(self.request.id, 10, 'Downloading YouTube video and audio')
+                # Now returns a tuple of (video_path, audio_path)
+                video_path, audio_path = download_youtube_video(source_path_or_url, tmpdir)
             else:
                 set_task_progress(self.request.id, 10, 'Processing uploaded video')
                 video_path = source_path_or_url
-            audio_path = os.path.join(tmpdir, 'audio.wav')
-            set_task_progress(self.request.id, 40, 'Extracting audio')
-            extract_audio(video_path, audio_path)
+                audio_path = os.path.join(tmpdir, 'audio.wav')
+                set_task_progress(self.request.id, 40, 'Extracting audio')
+                extract_audio(video_path, audio_path)
+                
             set_task_progress(self.request.id, 60, 'Transcribing audio')
             transcript = transcribe_audio(audio_path, model_size=model_size)
             
             # Generate Spanish script
-            set_task_progress(self.request.id, 80, 'Generating Spanish script')
+            set_task_progress(self.request.id, 70, 'Generating Spanish script')
             try:
                 from app.utils.script_generation import generate_spanish_script
                 spanish_script = generate_spanish_script(transcript)
@@ -136,6 +171,7 @@ def celery_transcribe(self, source_path_or_url, is_youtube=False, model_size='ba
                 spanish_script_json = json.dumps(spanish_script)
             except Exception as e:
                 print(f"Error generating Spanish script: {str(e)}")
+                traceback.print_exc()
                 # Create a valid JSON structure even on error
                 spanish_script_json = json.dumps({
                     "sections": {
@@ -146,8 +182,31 @@ def celery_transcribe(self, source_path_or_url, is_youtube=False, model_size='ba
                         }
                     }
                 })
+                
+            # Extract and describe scenes from the video
+            set_task_progress(self.request.id, 80, 'Extracting and describing scenes')
+            try:
+                from app.utils.scene_extraction import SceneExtractor
+                scene_extractor = SceneExtractor()
+                scenes = scene_extractor.extract_and_describe(
+                    video_path, 
+                    interval_seconds=30,  # Extract a frame every 30 seconds
+                    max_frames=6,         # Maximum 6 frames to avoid long processing
+                    task_id=self.request.id  # Pass the task ID for frame directory naming
+                )
+                scenes_json = json.dumps(scenes)
+            except Exception as e:
+                print(f"Error extracting scenes: {str(e)}")
+                traceback.print_exc()
+                # Create a valid JSON structure even on error
+                scenes_json = json.dumps([{
+                    "index": 0,
+                    "timestamp": 0,
+                    "timestamp_formatted": "00:00",
+                    "description": f"Error extracting scenes: {str(e)}"
+                }])
             
-            # Store the transcript and Spanish script in Redis
+            # Store the transcript, Spanish script, and scenes in Redis
             r = redis.Redis.from_url(REDIS_URL)
             task_key = f'celery-task-meta-{self.request.id}'
             
@@ -162,6 +221,7 @@ def celery_transcribe(self, source_path_or_url, is_youtube=False, model_size='ba
             task_data = {
                 'result': transcript,
                 'spanish_script': spanish_script_json,
+                'scenes': scenes_json,
                 'status': 'success',
                 'progress': '100',
                 'status_msg': 'Completed'
@@ -171,8 +231,12 @@ def celery_transcribe(self, source_path_or_url, is_youtube=False, model_size='ba
             # Also use the helper function for consistency
             set_task_progress(self.request.id, 100, 'Completed', result=transcript)
             
-            # Return both transcript and Spanish script
-            return {"transcript": transcript, "spanish_script": spanish_script}
+            # Return transcript, Spanish script, and scenes
+            return {
+                "transcript": transcript, 
+                "spanish_script": spanish_script,
+                "scenes": scenes
+            }
         except Exception as e:
             set_task_progress(self.request.id, 100, f'Failed: {str(e)}')
             raise
