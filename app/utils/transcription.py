@@ -184,7 +184,7 @@ def celery_transcribe(self, source_path_or_url, is_youtube=False, model_size='ba
                 })
                 
             # Extract and describe scenes from the video
-            set_task_progress(self.request.id, 80, 'Extracting and describing scenes')
+            set_task_progress(self.request.id, 75, 'Extracting and describing scenes')
             try:
                 from app.utils.scene_extraction import SceneExtractor
                 scene_extractor = SceneExtractor()
@@ -194,7 +194,13 @@ def celery_transcribe(self, source_path_or_url, is_youtube=False, model_size='ba
                     max_frames=6,         # Maximum 6 frames to avoid long processing
                     task_id=self.request.id  # Pass the task ID for frame directory naming
                 )
-                scenes_json = json.dumps(scenes)
+                
+                # Generate AI prompts for each scene
+                set_task_progress(self.request.id, 90, 'Generating AI prompts for scenes')
+                from app.utils.prompt_generation import PromptGenerator
+                prompt_generator = PromptGenerator()
+                scenes_with_prompts = prompt_generator.generate_prompts_for_scenes(scenes)
+                scenes_json = json.dumps(scenes_with_prompts)
             except Exception as e:
                 print(f"Error extracting scenes: {str(e)}")
                 traceback.print_exc()
