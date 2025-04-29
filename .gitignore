@@ -50,3 +50,5 @@ Thumbs.db
 uploads/
 downloads/
 temp/
+app/templates/background_effect.css
+app/static/frames/*
