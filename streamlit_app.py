@@ -24,12 +24,63 @@ except LookupError:
 def download_youtube_video(url, output_dir):
     """Download a YouTube video to the specified directory."""
     try:
-        yt = YouTube(url)
+        # Extract video ID from URL
+        if 'youtu.be' in url:
+            video_id = url.split('/')[-1].split('?')[0]
+        elif 'youtube.com/watch' in url:
+            from urllib.parse import parse_qs, urlparse
+            parsed_url = urlparse(url)
+            video_id = parse_qs(parsed_url.query).get('v', [None])[0]
+        else:
+            video_id = None
+            
+        if not video_id:
+            raise Exception("Could not extract video ID from URL")
+            
+        # Create YouTube object with specific parameters to avoid API issues
+        yt = YouTube(
+            url,
+            use_oauth=False,
+            allow_oauth_cache=False
+        )
+        
+        # Get highest quality MP4 stream
         video = yt.streams.filter(progressive=True, file_extension='mp4').order_by('resolution').desc().first()
+        
+        if not video:
+            # Try getting any video stream if progressive MP4 is not available
+            video = yt.streams.filter(file_extension='mp4').first()
+            
+        if not video:
+            raise Exception("No suitable video stream found")
+            
+        # Download the video
         output_path = video.download(output_path=output_dir)
         return output_path, yt.title
     except Exception as e:
+        st.error(f"YouTube download error: {str(e)}")
+        st.info("If YouTube download fails, please try the 'Upload Video File' option instead.")
         raise Exception(f"Error downloading YouTube video: {str(e)}")
+
+        
+# Alternative function that works with video file URLs
+def process_video_url(url, output_dir):
+    """Process a direct video file URL (not YouTube)."""
+    try:
+        # Download the video file directly
+        response = requests.get(url, stream=True)
+        if response.status_code == 200:
+            file_path = os.path.join(output_dir, "video.mp4")
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=1024*1024):
+                    if chunk:
+                        f.write(chunk)
+            return file_path, "Downloaded Video"
+        else:
+            raise Exception(f"Failed to download video: HTTP {response.status_code}")
+    except Exception as e:
+        raise Exception(f"Error downloading video: {str(e)}")
+
 
 def transcribe_video(video_path, model_size='base'):
     """Transcribe a video file using Whisper."""
@@ -255,19 +306,31 @@ input_option = st.radio(
 )
 
 if input_option == "YouTube URL":
+    st.info("Enter a YouTube URL to process. Examples: https://www.youtube.com/watch?v=dQw4w9WgXcQ or https://youtu.be/dQw4w9WgXcQ")
     youtube_url = st.text_input("Enter YouTube URL:")
-    process_button = st.button("Process Video")
+    
+    # Sample YouTube URLs
+    st.markdown("**Sample YouTube URLs you can try:**")
+    st.code("https://www.youtube.com/watch?v=dQw4w9WgXcQ", language="text")
+    st.code("https://youtu.be/9bZkp7q19f0", language="text")
+    
+    process_button = st.button("Process YouTube Video")
     
     if process_button and youtube_url:
-        with st.spinner("Processing video... This may take a few minutes."):
+        with st.spinner("Processing YouTube video... This may take a few minutes."):
             try:
                 # Create a temporary directory for processing
                 temp_dir = tempfile.mkdtemp()
                 
                 # Download YouTube video
-                st.text("Downloading video...")
+                st.text("Downloading video from YouTube...")
                 video_path, video_title = download_youtube_video(youtube_url, temp_dir)
                 st.text(f"Downloaded: {video_title}")
+                
+                # Show success message with video title
+                st.success(f"Successfully downloaded: {video_title}")
+
+
                 
                 # Transcribe video
                 st.text("Transcribing video...")
