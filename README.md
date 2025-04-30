@@ -225,6 +225,3 @@ This project follows the standard Flask application structure. To run the develo
 flask run
 ```
 
-## License
-
-[Your chosen license]

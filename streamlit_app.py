@@ -299,36 +299,39 @@ This application combines NLP and Computer Vision to:
 4. Generate AI image/video prompts
 """)
 
-# Input options
+# Input options with file upload as the default
 input_option = st.radio(
     "Choose input method:",
-    ("YouTube URL", "Upload Video File")
+    ("Upload Video File", "YouTube URL (Limited Support)")
 )
 
-if input_option == "YouTube URL":
-    st.info("Enter a YouTube URL to process. Examples: https://www.youtube.com/watch?v=dQw4w9WgXcQ or https://youtu.be/dQw4w9WgXcQ")
+if input_option == "YouTube URL (Limited Support)":
+    st.warning("⚠️ YouTube downloads are currently limited on the deployed app due to platform restrictions.")
+    st.info("For the best experience, please use the 'Upload Video File' option with a short MP4 video.")
     youtube_url = st.text_input("Enter YouTube URL:")
     
-    # Sample YouTube URLs
-    st.markdown("**Sample YouTube URLs you can try:**")
-    st.code("https://www.youtube.com/watch?v=dQw4w9WgXcQ", language="text")
-    st.code("https://youtu.be/9bZkp7q19f0", language="text")
+    # Download links for sample videos
+    st.markdown("**Download these sample videos to try:**")
+    st.markdown("1. [Download Sample Video 1 (5s)](https://github.com/Zeaxanthin80/sample-videos/raw/main/sample-5s.mp4)")
+    st.markdown("2. [Download Sample Video 2 (10s)](https://github.com/Zeaxanthin80/sample-videos/raw/main/sample-10s.mp4)")
     
-    process_button = st.button("Process YouTube Video")
+    process_button = st.button("Try Processing YouTube Video")
     
     if process_button and youtube_url:
-        with st.spinner("Processing YouTube video... This may take a few minutes."):
+        with st.spinner("Attempting to process YouTube video... This may take a few minutes."):
             try:
                 # Create a temporary directory for processing
                 temp_dir = tempfile.mkdtemp()
                 
-                # Download YouTube video
-                st.text("Downloading video from YouTube...")
-                video_path, video_title = download_youtube_video(youtube_url, temp_dir)
-                st.text(f"Downloaded: {video_title}")
-                
-                # Show success message with video title
-                st.success(f"Successfully downloaded: {video_title}")
+                # Download YouTube video with clear warning about potential failure
+                st.text("Attempting to download from YouTube (may not work in deployed app)...")
+                try:
+                    video_path, video_title = download_youtube_video(youtube_url, temp_dir)
+                    st.success(f"Successfully downloaded: {video_title}")
+                except Exception as e:
+                    st.error(f"YouTube download failed: {str(e)}")
+                    st.info("Please use the 'Upload Video File' option instead.")
+                    st.stop()
 
 
                 
@@ -383,7 +386,21 @@ if input_option == "YouTube URL":
                 st.error(f"Error processing video: {str(e)}")
 
 else:  # Upload Video File
+    st.info("📁 Upload a video file (MP4 recommended) to process it with our NLP and CV tools.")
+    
+    # Download links for sample videos
+    st.markdown("**Don't have a video? Download these samples:**")
+    st.markdown("1. [Download Sample Video 1 (5s)](https://github.com/Zeaxanthin80/sample-videos/raw/main/sample-5s.mp4)")
+    st.markdown("2. [Download Sample Video 2 (10s)](https://github.com/Zeaxanthin80/sample-videos/raw/main/sample-10s.mp4)")
+    
     uploaded_file = st.file_uploader("Upload a video file", type=["mp4", "mov", "avi", "mkv"])
+    
+    if uploaded_file:
+        # Display video info
+        file_details = {"Filename": uploaded_file.name, "File size": f"{uploaded_file.size / 1024 / 1024:.2f} MB"}
+        st.write("**File Details:**")
+        st.json(file_details)
+        
     process_button = st.button("Process Video")
     
     if process_button and uploaded_file:
@@ -395,6 +412,9 @@ else:  # Upload Video File
                 
                 with open(temp_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
+                    
+                st.success(f"Successfully uploaded: {uploaded_file.name}")
+
                 
                 # Transcribe video
                 st.text("Transcribing video...")
