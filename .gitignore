@@ -19,6 +19,19 @@ eggs/
 lib/
 lib64/
 parts/
+
+# NLTK Data
+nltk_data/
+
+# Large files
+*.zip
+*.model
+*.tar.gz
+*.tar
+*.ckpt
+
+# Frames directory with generated content
+app/static/frames/
 sdist/
 var/
 wheels/
@@ -52,3 +65,4 @@ downloads/
 temp/
 app/templates/background_effect.css
 app/static/frames/*
+nltk_data/
