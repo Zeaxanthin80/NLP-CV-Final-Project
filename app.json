@@ -1,0 +1,30 @@
+{
+  "name": "Video Content Adaptation System",
+  "description": "A system that transcribes videos, creates Spanish scripts, extracts scenes, and generates AI prompts",
+  "repository": "https://github.com/Zeaxanthin80/NLP-CV-Final-Project",
+  "keywords": ["python", "flask", "nlp", "cv", "whisper", "celery"],
+  "addons": [
+    "heroku-redis:hobby-dev"
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "PYTHON_VERSION": {
+      "description": "Python version to use",
+      "value": "3.10.0"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "free"
+    },
+    "worker": {
+      "quantity": 1,
+      "size": "free"
+    }
+  }
+}
